@@ -1,10 +1,11 @@
+import numpy as np
 # some kind of representation of the columns 
     # dictionary that goes from original column name to index representation
 # include conflicts
 
 # store somewhere what index goes to what 
 N = 2
-M = 3
+M = 4
 preferences_csv_path = 'fall_clinical_preferences.csv'
 pp_csv_path = 'fall_preference_points.csv'
 column_dict = {
@@ -18,6 +19,14 @@ column_dict = {
     'Clinical Site Psych - Thursdays Gateways Hospital and Mental Health Center': '[1,1]',
     'Clinical Site Psych - Saturdays Gateways Hospital and Mental Health Center': '[1,2]'
 }
+restrictions = np.asarray([
+    [[(1, 0)], # Monday Med Surg (0,0)
+     [], # Friday Med Surg (0,1)
+     [(1,2)]], # Saturday Med Surg (0,2)
+    [[(0,0)], # Monday Psych (1,0)
+     [], # Thursday Psych (1,1)
+     [(0,2)]] # Saturday Psych (1,2) 
+], dtype=object)
 
 
 
