@@ -38,6 +38,6 @@ restrictions = np.asarray([
 
 placement_count_original = np.asarray([
     [10,10,10,0],
-    [6,8,8,8],
+    [6,8,9,9],
     [6,8,8,7]
 ])

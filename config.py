@@ -5,7 +5,7 @@ import numpy as np
 
 # store somewhere what index goes to what 
 N = 2
-M = 4
+M = 3
 preferences_csv_path = 'fall_clinical_preferences.csv'
 pp_csv_path = 'fall_preference_points.csv'
 column_dict = {
@@ -27,6 +27,11 @@ restrictions = np.asarray([
      [], # Thursday Psych (1,1)
      [(0,2)]] # Saturday Psych (1,2) 
 ], dtype=object)
+
+placement_count_original = np.asarray([
+    [10,10,10],
+    [10,10,10],
+])
 
 
 

@@ -6,8 +6,9 @@ import ast
 import math
 import random
 import seaborn as sns
+import copy
 
-from config import column_dict, N, M, preferences_csv_path, pp_csv_path
+from config_spring import column_dict, N, M, preferences_csv_path, pp_csv_path
 
 """
 N = num rotations
@@ -80,7 +81,7 @@ def build_S(preferences : pd.DataFrame, N : int, M : int):
         S[:,rotation_idx[0],rotation_idx[1]] = preferences[col]
     return S
 
-def G(S,r,pp,N):
+def G(S,r,pp,N,M):
     S_prime = np.zeros((S.shape[0],N,M))
     def calc_pref_val(preference):
         if preference == 1:
@@ -89,6 +90,7 @@ def G(S,r,pp,N):
             return (preference - 2)*(-2) -1
     for i in range(S.shape[0]):
         S_prime_i = np.zeros((N,M))
+        print(S_prime_i.shape)
         for row in range(N):
             for col in range(M):
                 val = 0
@@ -127,16 +129,7 @@ def allocate_pp(rotation_rank, pp):
     else:
         return pp - rotation_rank
 
-def place(S_prime,restrictions,N,M,placement_count_original):
-    """
-    NOT TESTED
-    """
-    placement_count = placement_count_original.copy()
-    printing=False
-    num_students = S_prime.shape[0]
-    
-    # Preparing data for algorithm
-
+def create_preference_list(S_prime, N, M, num_students):
     # just holds the score for a placement
     preference_list=np.zeros((num_students * N * M, ), dtype=int) 
 
@@ -152,41 +145,77 @@ def place(S_prime,restrictions,N,M,placement_count_original):
                 preference_list_meta_data[i] = [k, row, col] 
                 preference_list[i] = S_prime_k[row,col]
                 i += 1      
+
+    return preference_list, preference_list_meta_data
+    
+def sort_preferences(preference_list, preference_list_meta_data):
+    # Sort preferences in ascending order
+    sort_idxs = np.argsort(preference_list)
+    sorted_preferences = preference_list[sort_idxs]
+    sorted_meta = preference_list_meta_data[sort_idxs]
+
+    # Sort preferences in descending order
+    sorted_preferences = sorted_preferences[::-1]
+    sorted_meta = sorted_meta[::-1]
+    return sorted_preferences, sorted_meta
+
+def update_placement_dict(preference_list_meta_data, num_students):
+    placement_dict = {i:[0]*N for i in range(num_students)}
+    for current_student, current_rotation, current_placement in preference_list_meta_data:
+        placement_dict[current_student][current_rotation] += 1
+    return placement_dict
+
+def place(S_prime,restrictions,N,M,placement_count_original):
+    """
+    NOT TESTED
+    """
+    placement_count = placement_count_original.copy()
+    printing=False
+    num_students = S_prime.shape[0]
+    
+    # Preparing data for algorithm
+
+    preference_list, preference_list_meta_data = create_preference_list(S_prime, N, M, num_students)
+    shuffle_idxs = np.linspace(0,preference_list.shape[0] - 1, preference_list.shape[0]).astype(int)
+    random.shuffle(shuffle_idxs)
+    preference_list = preference_list[shuffle_idxs]
+    preference_list_meta_data = preference_list_meta_data[shuffle_idxs]
     total_placements = 0
 
     if printing:
         print(preference_list_meta_data)
         print(preference_list) 
         
+    scoring_preference_list = preference_list
+    scoring_preference_list_meta = copy.deepcopy(preference_list_meta_data)
+    preference_list = np.zeros_like(preference_list)
+    
     while total_placements < num_students*N:
-    # while False:
-        print('STARTING PLACEMENT PROCESS')
-        print(total_placements)
-        # Sort preferences in ascending order
-        sort_idxs = np.argsort(preference_list)
-        sorted_preferences = preference_list[sort_idxs]
-        sorted_meta = preference_list_meta_data[sort_idxs]
-
+        # print('STARTING PLACEMENT PROCESS')
+        # print(total_placements)
         # Sort preferences in descending order
-        sorted_preferences = sorted_preferences[::-1]
-        sorted_meta = sorted_meta[::-1]
-
-        # Initializa array to keep track of placements left
-        # placement_count = np.zeros((N,M)) + 10
+        sorted_preferences, sorted_meta = sort_preferences(preference_list, preference_list_meta_data)
         
         # Initiate final placement dict
         placements = {}
+        
+        # Initiate dict for keeping tract of placements left for each student
+        placement_dict = update_placement_dict(sorted_meta, num_students)
+        
+        # Initiate dict to keep track of who has been placed 
+        placed_dict = {i:[False,False,False] for i in range(num_students)}
+
         # Initialize score
         score = 0
         while sorted_preferences.shape[0] > 0:
-        # xyz = 1
-        # while xyz > 0:
-        #     xyz=0
             current_student, current_rotation, current_placement = sorted_meta[0]
             current_conflicts = restrictions[current_rotation, current_placement]
-            # if printing:
-            #     print('current conflicts:')
-            #     print(current_conflicts)
+
+            score_revert = copy.deepcopy(score)
+            placements_revert = copy.deepcopy(placements)
+            placement_count_revert = copy.deepcopy(placement_count)
+            sorted_preferences_revert = copy.deepcopy(sorted_preferences)
+            sorted_meta_revert = copy.deepcopy(sorted_meta) 
 
             # Check if current placement is available
             if placement_count[current_rotation, current_placement] > 0:
@@ -205,6 +234,12 @@ def place(S_prime,restrictions,N,M,placement_count_original):
                 # Update number of placements available
                 placement_count[current_rotation, current_placement] += (-1)
 
+                # If placement becomes full, remove all choices for that placement
+                if placement_count[current_rotation, current_placement] == 0:
+                    removal_mask = np.invert(((sorted_meta[:,2] == current_placement) & (sorted_meta[:,1] == current_rotation)))
+                    sorted_preferences = sorted_preferences[removal_mask]
+                    sorted_meta = sorted_meta[removal_mask]
+
                 # Then remove current student from the list (for current rotation)
                 removal_mask = np.invert(((sorted_meta[:,0] == current_student) & (sorted_meta[:,1] == current_rotation)))
                 if printing:
@@ -213,8 +248,6 @@ def place(S_prime,restrictions,N,M,placement_count_original):
                 sorted_preferences = sorted_preferences[removal_mask]
                 sorted_meta = sorted_meta[removal_mask]
                 
-
-
                 # And remove any conflicts
                 if len(current_conflicts) > 0:
                     for conflict in current_conflicts:
@@ -224,11 +257,41 @@ def place(S_prime,restrictions,N,M,placement_count_original):
                             print(sorted_meta[np.invert(removal_mask)])
                         sorted_preferences = sorted_preferences[removal_mask]
                         sorted_meta = sorted_meta[removal_mask]
-                        
-                # elif len(current_conflicts) > 2:
-                #     print('Too many conflicts, needs implementation')
-                else:
-                    continue
+                placement_dict = update_placement_dict(sorted_meta, num_students)
+                placed_dict[current_student][current_rotation] = True
+
+                if printing:
+                    print('placement dict')
+                    print(placement_dict)
+                    print('/nplaced dict')
+                    print(placed_dict)
+
+                broken=False
+                for student in range(num_students):
+                    for i in range(N):
+                        if (placement_dict[student][i] == 0) and (placed_dict[student][i] == False):
+                            # REVERT!!!
+                            if printing:
+                                print('ABORT MISSION. This will fuck things up')
+                                print(f'rotation {i} for student {student} will not be possible')
+                            score = copy.deepcopy(score_revert) 
+                            placements = copy.deepcopy(placements_revert) 
+                            placement_count = copy.deepcopy(placement_count_revert) 
+                            sorted_preferences = copy.deepcopy(sorted_preferences_revert) 
+                            sorted_meta = copy.deepcopy(sorted_meta_revert) 
+                            if printing:
+                                print(f'Removing {sorted_meta[0]}')
+                            sorted_preferences = sorted_preferences[1:]
+                            sorted_meta = sorted_meta[1:]
+                            placed_dict[current_student][current_rotation] = False
+                            
+                            broken = True
+                            break
+                    if broken:
+                        break
+
+                
+                
 
             else: # If placement is full
                 # Remove current entry and keep going
@@ -246,6 +309,17 @@ def place(S_prime,restrictions,N,M,placement_count_original):
             preference_list = preference_list[shuffle_idxs]
             preference_list_meta_data = preference_list_meta_data[shuffle_idxs]
             placement_count = placement_count_original.copy()
-    return placements, score
-                  
+    return placements, score, scoring_preference_list, scoring_preference_list_meta
+
+def score(placements, scoring_preference_list, scoring_preference_list_meta):
+    total = 0
+    for p, students in placements.items():
+        p = [int(p[1]),int(p[3])]
+        for s in students:
+            student_vals = np.equal(scoring_preference_list_meta[:,0], s)
+            rotation_vals = np.equal(scoring_preference_list_meta[:,1], p[0])
+            placement_vals = np.equal(scoring_preference_list_meta[:,2], p[1])
+            mask = student_vals & rotation_vals & placement_vals
+            total += scoring_preference_list[mask]
+    return total
 
